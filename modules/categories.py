@@ -72,6 +72,16 @@ def get_total_products_in_tree(category_id, categories_df, products_df):
         return 0
     return len(products_df[products_df['Category_ID'].isin(all_cats)])
 
+# ✅ NEW FUNCTION (ADDED)
+def get_products_in_tree(category_id, categories_df, products_df):
+    all_cats = get_all_subcategories(category_id, categories_df)
+    all_cats.append(category_id)
+
+    if products_df.empty or 'Category_ID' not in products_df.columns:
+        return pd.DataFrame()
+
+    return products_df[products_df['Category_ID'].isin(all_cats)]
+
 # Show success message
 if st.session_state.category_added:
     st.balloons()
@@ -81,14 +91,14 @@ if st.session_state.category_added:
 
 # ========== ADD/EDIT FORM ==========
 if st.session_state.show_add_form or st.session_state.edit_category_id:
-    
+
     if st.button("← Back to Category List", use_container_width=True):
         st.session_state.show_add_form = False
         st.session_state.edit_category_id = None
         st.rerun()
-    
+
     st.markdown("---")
-    
+
     if st.session_state.edit_category_id:
         st.subheader("✏️ Edit Category")
         categories_df = init_categories()
@@ -97,17 +107,16 @@ if st.session_state.show_add_form or st.session_state.edit_category_id:
     else:
         st.subheader("➕ Add New Category")
         is_edit = False
-    
+
     categories_df = init_categories()
-    
+
     with st.form(key="category_form"):
         if is_edit:
             name = st.text_input("Category Name", value=category['Name'])
         else:
             name = st.text_input("Category Name", placeholder="Example: ELECTRONICS, FURNITURE")
-        
+
         if is_edit:
-            # For edit, show current parent
             if category['Parent_ID'] is None or category['Parent_ID'] == 1:
                 current_parent = "None (Root Category)"
             else:
@@ -115,7 +124,6 @@ if st.session_state.show_add_form or st.session_state.edit_category_id:
                 current_parent = get_category_path(parent_cat['ID'], categories_df)
             st.info(f"Current Parent: {current_parent}")
         else:
-            # For add, allow parent selection
             parent_options = {"None (Root Category)": None}
             for _, cat in categories_df.iterrows():
                 if cat['ID'] != 1:
@@ -123,7 +131,7 @@ if st.session_state.show_add_form or st.session_state.edit_category_id:
                     parent_options[path] = cat['ID']
             parent_selected = st.selectbox("Parent Category", list(parent_options.keys()))
             parent_id = parent_options[parent_selected]
-        
+
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
             if st.form_submit_button("Cancel", use_container_width=True):
@@ -160,7 +168,7 @@ if st.session_state.show_add_form or st.session_state.edit_category_id:
                             st.session_state.category_added = True
                             st.session_state.last_added_category = name
                             st.rerun()
-    
+
     st.stop()
 
 # ========== MAIN CATEGORY LIST VIEW ==========
@@ -181,10 +189,10 @@ if len(categories_df) <= 1:
     st.info("Only 'ALL PRODUCTS' exists. Click 'Add New Category' to get started.")
 else:
     root_categories = categories_df[(categories_df['Parent_ID'].isna()) & (categories_df['ID'] != 1)].sort_values('Name')
-    
+
     for _, root in root_categories.iterrows():
         total_products = get_total_products_in_tree(root['ID'], categories_df, products_df)
-        
+
         with st.expander(f"📁 {root['Name']} - {total_products} product(s)", expanded=False):
             col1, col2, col3 = st.columns([3, 1, 1])
             with col1:
@@ -196,13 +204,13 @@ else:
             with col3:
                 direct_products = get_product_count(root['ID'], products_df)
                 st.caption(f"Products: {direct_products} (Tree: {total_products})")
-            
+
             def display_children(parent_id, level=1):
                 children = categories_df[categories_df['Parent_ID'] == parent_id].sort_values('Name')
                 for _, child in children.iterrows():
                     indent = "  " * level
                     child_products = get_total_products_in_tree(child['ID'], categories_df, products_df)
-                    
+
                     col1, col2, col3 = st.columns([3, 1, 1])
                     with col1:
                         st.write(f"{indent}└─ 📁 **{child['Name']}**")
@@ -213,10 +221,21 @@ else:
                             st.rerun()
                     with col3:
                         st.caption(f"Products: {child_products}")
-                    
+
+                    # ✅ SHOW CHILD PRODUCTS
+                    child_products_df = get_products_in_tree(child['ID'], categories_df, products_df)
+                    if not child_products_df.empty:
+                        st.dataframe(child_products_df)
+
                     display_children(child['ID'], level + 1)
-            
+
             display_children(root['ID'])
+
+            # ✅ SHOW ROOT PRODUCTS
+            products_in_cat = get_products_in_tree(root['ID'], categories_df, products_df)
+            if not products_in_cat.empty:
+                st.markdown("**Products in this category:**")
+                st.dataframe(products_in_cat)
 
 st.divider()
 st.caption("💡 Categories can have unlimited levels. Click Edit on any category to modify it.")
